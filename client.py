@@ -1,6 +1,7 @@
 from enum import Enum
 import argparse
 import socket
+import threading
 
 class client :
 
@@ -15,6 +16,8 @@ class client :
     # ****************** ATTRIBUTES ******************
     _server = None
     _port = -1
+    _listen_thread = None
+    _listen_socket = None
 
     # ******************** METHODS *******************
     # *
@@ -27,9 +30,10 @@ class client :
     def  register(user) :
         try:
             #conectamos al servidor
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((client._server, client._port))
-            #enviamos la operación al servidor con el caracter de fin de cadena
+            sock = client.connect_server()
+            if sock is None:
+                print("c> REGISTER FAIL")
+                return client.RC.ERROR
             sock.sendall(b"REGISTER\0")
             #enviamos el nombre del usuario
             sock.sendall((user + "\0").encode())
@@ -41,7 +45,7 @@ class client :
                 print("c> REGISTER OK")
                 return client.RC.OK
             elif resultado == b'\x01':
-                print("c> REGISTER IN USE")
+                print("c> USERNAME IN USE")
                 return client.RC.USER_ERROR 
             else:
                 print("c> REGISTER FAIL")
@@ -60,8 +64,10 @@ class client :
     def  unregister(user) :
         try:
             #conectamos al servidor
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((client._server, client._port))
+            sock = client.connect_server()
+            if sock is None:
+                print("c> UNREGISTER FAIL")
+                return client.RC.ERROR
             #enviamos la operación al servidor con el caracter de fin de cadena
             sock.sendall(b"UNREGISTER\0")
             #enviamos el nombre del usuario
@@ -92,11 +98,41 @@ class client :
     # * @return ERROR if another error occurred
     @staticmethod
     def  connect(user):
-        
-        
-        #  Write your code here
-        return client.RC.ERROR
-
+        try:
+            #buscamos el puerto libre
+            listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listen_sock.bind(("", 0))
+            puerto = listen_sock.getsockname()[1]
+            listen_sock.listen(10)
+            client._listen_socket = listen_sock
+            #creamos el hilo para escuchar
+            client._listen_thread = threading.Thread(target=client.listen, args=(user,), daemon=True)
+            client._listen_thread.start()
+            #conectamos al servidor
+            sock = client.connect_server()
+            if sock is None:
+                print("c> CONNECT FAIL")
+                return client.RC.ERROR  
+            sock.sendall(b"CONNECT\0")
+            sock.sendall((user + "\0").encode())
+            sock.sendall((str(puerto) + "\0").encode())
+            resultado = sock.recv(1)
+            sock.close()
+            if resultado == b'\x00':
+                print("c> CONNECT OK")
+                return client.RC.OK 
+            elif resultado == b'\x01':
+                print("c> CONNECT FAIL, USER DOES NOT EXIST")
+                return client.RC.USER_ERROR
+            elif resultado == b'\x02':
+                print("c> USER  ALREADY CONNECTED")
+                return client.RC.USER_ERROR
+            else:
+                print("c> CONNECT FAIL")
+                return client.RC.ERROR
+        except Exception as e:
+            print("c> CONNECT FAIL")
+            return client.RC.ERROR
     # *
     # * 
     # * @return OK if successful
@@ -244,6 +280,19 @@ class client :
 
         return True
 
+    #funcion axuliar para conectar al servidor
+    @staticmethod
+    def connect_server():
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((client._server, client._port))
+            return sock
+        except Exception as e:
+            return None
+    
+    @staticmethod
+    def listen(user):
+        return None
 
     # ******************** MAIN *********************
     @staticmethod
