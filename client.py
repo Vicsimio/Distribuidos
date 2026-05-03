@@ -292,7 +292,46 @@ class client :
     
     @staticmethod
     def listen(user):
-        return None
+        try:
+            while True:
+                conexion, direccion = client._listen_socket.accept()
+                #leemos la operacion
+                operacion = b""
+                while not operacion.endswith(b'\0'):
+                    operacion += conexion.recv(1)
+                operacion = operacion[:-1].decode()
+
+                if operacion == "SEND_MESSAGE":
+                    #leemos el remitente
+                    remitente = b""
+                    while not remitente.endswith(b'\0'):
+                        remitente += conexion.recv(1)
+                    remitente = remitente[:-1].decode()
+                    #leemos id
+                    id_mensaje = b""
+                    while not id_mensaje.endswith(b'\0'):
+                        id_mensaje += conexion.recv(1)
+                    id_mensaje = id_mensaje[:-1].decode()
+                    #leemos el mensaje
+                    mensaje = b""
+                    while not mensaje.endswith(b'\0'):
+                        mensaje += conexion.recv(1)
+                    mensaje = mensaje[:-1].decode()
+                    print(f"\ns> MESSAGE {id_mensaje} FROM  {remitente}")
+                    print(mensaje)
+                    print("END\n")
+                    print("c> ", end="", flush=True)
+                elif operacion == "SEND_MESS_ACK":
+                    id_mensaje = b""
+                    while not id_mensaje.endswith(b'\0'):
+                        id_mensaje += conexion.recv(1)  
+                    id_mensaje = id_mensaje[:-1].decode()
+                    print(f"\nc> SEND MESSAGE {id_mensaje} OK")
+                    print("c> ", end="", flush=True)
+                conexion.close()
+
+        except Exception as e:
+            pass
 
     # ******************** MAIN *********************
     @staticmethod
