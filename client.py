@@ -153,9 +153,35 @@ class client :
     # * @return ERROR if another error occurred
     @staticmethod
     def  disconnect(user) :
-        #  Write your code here
-        return client.RC.ERROR
-
+        try:
+            #conectamos al servidor
+            sock = client.connect_server()
+            if sock is None:
+                print("c> DISCONNECT FAIL")
+                return client.RC.ERROR
+            sock.sendall(b"DISCONNECT\0")
+            sock.sendall((user + "\0").encode())
+            resultado = sock.recv(1)
+            sock.close()
+            if resultado == b'\x00':
+                print("c> DISCONNECT OK")
+                #cerramos el socket de escucha y esperamos a que el hilo termine
+                client._listen_socket.close()
+                client._listen_thread.join()
+                return client.RC.OK
+            elif resultado == b'\x01':
+                print("c> DISCONNECT FAIL, USER DOES NOT EXIST")
+                return client.RC.USER_ERROR
+            elif resultado == b'\x02':
+                print("c> DISCONNECT FAIL, USER NOT CONNECTED")
+                return client.RC.USER_ERROR
+            else:
+                print("c> DISCONNECT FAIL")
+                return client.RC.ERROR
+        except Exception as e:
+            print("c> DISCONNECT FAIL")
+            return client.RC.ERROR
+            
     # *
     # * @param user    - Receiver user name
     # * @param message - Message to be sent
@@ -317,7 +343,7 @@ class client :
                     while not mensaje.endswith(b'\0'):
                         mensaje += conexion.recv(1)
                     mensaje = mensaje[:-1].decode()
-                    print(f"\ns> MESSAGE {id_mensaje} FROM  {remitente}")
+                    print(f"\ns> MESSAGE {id_mensaje} FROM {remitente}")
                     print(mensaje)
                     print("END\n")
                     print("c> ", end="", flush=True)
