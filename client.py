@@ -18,6 +18,7 @@ class client :
     _port = -1
     _listen_thread = None
     _listen_socket = None
+    _user_conectado = None
 
     # ******************** METHODS *******************
     # *
@@ -140,10 +141,48 @@ class client :
     # * @return ERROR if another error occurred
     @staticmethod
     def  users() :
-        #  Write your code here
-        return client.RC.ERROR
+        try:
+            #conectamos al servidor
+            sock = client.connect_server()
+            if sock is None:
+                print("c>CONNECTED USERS FAIL")
+                return client.RC.ERROR
+            #enviamos la operacion
+            sock.sendall(b"USERS\0")
+            #enviamos el nombre del usuario conectado
+            sock.sendall((client._user_conectado + "\0").encode())
+            resultado = sock.recv(1)  #recibimos en un byte el resultado de la operacion
+            if resultado == b'\x00':
+                #recibimos el numero de usuarios conectados
+                num_usuarios = b""
+                #leemos byte a byte hasta encontrar el caracter de fin de cadena
+                while not num_usuarios.endswith(b'\0'):
+                    num_usuarios += sock.recv(1)
+                num_usuarios = int(num_usuarios[:-1].decode())
+                print(f"c> CONNECTED USERS ({num_usuarios} users connected) OK")
 
+                #recibimos los nombres de los usuarios conectados
+                for _ in range(num_usuarios):
+                    usuario = b""
+                    while not usuario.endswith(b'\0'):
+                        usuario += sock.recv(1)
+                    usuario = usuario[:-1].decode()
+                    print(f"\t{usuario}")
+                sock.close()
+                return client.RC.OK
+            elif resultado == b'\x01':
+                #usuario no conectado
+                print("c> CONNECTED USERS FAIL, USER IS NOT CONNECTED")
+                sock.close()
+                return client.RC.USER_ERROR
+            else:
+                print("c> CONNECTED USERS FAIL")
+                sock.close()
+                return client.RC.ERROR
 
+        except Exception as e:
+            print("c> CONNECTED USERS FAIL")
+            return client.RC.ERROR
 
     # *
     # * @param user - User name to disconnect from the system

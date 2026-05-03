@@ -14,3 +14,9 @@ zeep --> LA otra para clientes
 
 
 quitar 
+flujo de las operaciones
+conectar servidor --> condicion por si el socket ha ido aml
+enviar codigo de ooeracion
+bucle para almacenar el resultado hasta encontrar el fin de cadena
+
+dependiendo del resultado hacemos una cosa u otra
