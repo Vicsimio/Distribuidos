@@ -120,15 +120,22 @@ class client :
             resultado = sock.recv(1)
             sock.close()
             if resultado == b'\x00':
+                client._user_conectado = user
                 print("c> CONNECT OK")
                 return client.RC.OK 
             elif resultado == b'\x01':
+                client._listen_socket.close()
+                client._listen_socket = None
                 print("c> CONNECT FAIL, USER DOES NOT EXIST")
                 return client.RC.USER_ERROR
             elif resultado == b'\x02':
-                print("c> USER  ALREADY CONNECTED")
+                client._listen_socket.close()
+                client._listen_socket = None
+                print("c> USER ALREADY CONNECTED")
                 return client.RC.USER_ERROR
             else:
+                client._listen_socket.close()
+                client._listen_socket = None
                 print("c> CONNECT FAIL")
                 return client.RC.ERROR
         except Exception as e:
@@ -142,39 +149,41 @@ class client :
     @staticmethod
     def  users() :
         try:
+            # Revisamos que el user esté conectado y no sea None para que no rompa
+            if client._user_conectado is None:
+                print("c> CONNECTED USERS FAIL, USER IS NOT CONNECTED")
+                return client.RC.USER_ERROR
+
             #conectamos al servidor
             sock = client.connect_server()
             if sock is None:
                 print("c>CONNECTED USERS FAIL")
                 return client.RC.ERROR
+
             #enviamos la operacion
             sock.sendall(b"USERS\0")
+
             #enviamos el nombre del usuario conectado
             sock.sendall((client._user_conectado + "\0").encode())
             resultado = sock.recv(1)  #recibimos en un byte el resultado de la operacion
+
             if resultado == b'\x00':
-                #recibimos el numero de usuarios conectados
-                num_usuarios = b""
-                #leemos byte a byte hasta encontrar el caracter de fin de cadena
-                while not num_usuarios.endswith(b'\0'):
-                    num_usuarios += sock.recv(1)
-                num_usuarios = int(num_usuarios[:-1].decode())
+                num_usuarios = int(client.recv_string(sock))
                 print(f"c> CONNECTED USERS ({num_usuarios} users connected) OK")
 
                 #recibimos los nombres de los usuarios conectados
                 for _ in range(num_usuarios):
-                    usuario = b""
-                    while not usuario.endswith(b'\0'):
-                        usuario += sock.recv(1)
-                    usuario = usuario[:-1].decode()
+                    usuario = client.recv_string(sock)
                     print(f"\t{usuario}")
                 sock.close()
                 return client.RC.OK
+
             elif resultado == b'\x01':
                 #usuario no conectado
                 print("c> CONNECTED USERS FAIL, USER IS NOT CONNECTED")
                 sock.close()
                 return client.RC.USER_ERROR
+
             else:
                 print("c> CONNECTED USERS FAIL")
                 sock.close()
@@ -204,19 +213,26 @@ class client :
             sock.close()
             if resultado == b'\x00':
                 print("c> DISCONNECT OK")
+                #Como ha ido bien, limpiamos el usuario conectado
+                client._user_conectado = None
+
                 #cerramos el socket de escucha y esperamos a que el hilo termine
                 client._listen_socket.close()
                 client._listen_thread.join()
                 return client.RC.OK
+
             elif resultado == b'\x01':
                 print("c> DISCONNECT FAIL, USER DOES NOT EXIST")
                 return client.RC.USER_ERROR
+
             elif resultado == b'\x02':
                 print("c> DISCONNECT FAIL, USER NOT CONNECTED")
                 return client.RC.USER_ERROR
+
             else:
                 print("c> DISCONNECT FAIL")
                 return client.RC.ERROR
+
         except Exception as e:
             print("c> DISCONNECT FAIL")
             return client.RC.ERROR
@@ -230,6 +246,26 @@ class client :
     # * @return ERROR the user does not exist or another error occurred
     @staticmethod
     def  send(user,  message) :
+        sock = None
+
+        try:
+            #Nos aseguramos de que el cliente esté conectado correctamente
+            if client._user_conectado == None:
+                print("c> SEND FAIL")
+                return client.RC:ERROR
+
+            #Nos aseguramos de que el mensaje tenga un máximo de 255 carácteres útiles
+            if len(message.encode()) > 255:
+                print("c> SEND FAIL")
+                return client.RC:ERROR
+
+            sock = client.connect_server
+            if sock == None:
+                print("c> SEND FAIL")
+                return client.RC:ERROR 
+
+            sock.sendall 
+
         #  Write your code here
         return client.RC.ERROR
 
@@ -354,39 +390,37 @@ class client :
             return sock
         except Exception as e:
             return None
-    
+
+    #función auxiliar para recibir strings y evitar repetir el bucle de leer hasta \0
+    @staticmethod
+    def recv_string(sock):
+        #recibimos el numero de usuarios conectados
+        num_usuarios = b""
+        #leemos byte a byte hasta encontrar el caracter de fin de cadena
+        while not num_usuarios.endswith(b"\0"):
+            trozo = sock.recv(1)
+            num_usuarios += trozo
+        return num_usuarios[:-1].decode()
+        
+
     @staticmethod
     def listen(user):
         try:
             while True:
                 conexion, direccion = client._listen_socket.accept()
                 #leemos la operacion
-                operacion = b""
-                while not operacion.endswith(b'\0'):
-                    operacion += conexion.recv(1)
-                operacion = operacion[:-1].decode()
+                operacion = client.recv_string(conexion)
 
-                if operacion == "SEND_MESSAGE":
-                    #leemos el remitente
-                    remitente = b""
-                    while not remitente.endswith(b'\0'):
-                        remitente += conexion.recv(1)
-                    remitente = remitente[:-1].decode()
-                    #leemos id
-                    id_mensaje = b""
-                    while not id_mensaje.endswith(b'\0'):
-                        id_mensaje += conexion.recv(1)
-                    id_mensaje = id_mensaje[:-1].decode()
-                    #leemos el mensaje
-                    mensaje = b""
-                    while not mensaje.endswith(b'\0'):
-                        mensaje += conexion.recv(1)
-                    mensaje = mensaje[:-1].decode()
+                if operacion == "SEND MESSAGE":
+                    remitente = client.recv_string(conexion)
+                    id_mensaje = client.recv_string(conexion)
+                    mensaje = client.recv_string(conexion)
+
                     print(f"\ns> MESSAGE {id_mensaje} FROM {remitente}")
                     print(mensaje)
                     print("END\n")
                     print("c> ", end="", flush=True)
-                elif operacion == "SEND_MESS_ACK":
+                elif operacion == "SEND MESS ACK":
                     id_mensaje = b""
                     while not id_mensaje.endswith(b'\0'):
                         id_mensaje += conexion.recv(1)  
