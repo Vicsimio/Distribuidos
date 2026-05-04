@@ -245,29 +245,58 @@ class client :
     # * @return USER_ERROR if the user is not connected (the message is queued for delivery)
     # * @return ERROR the user does not exist or another error occurred
     @staticmethod
-    def  send(user,  message) :
-        sock = None
+    def  send(user,  message) :               
+        #Nos aseguramos de que el cliente esté conectado correctamente
+        if client._user_conectado == None:
+            print("c> SEND FAIL")
+            return client.RC:ERROR
+
+        #Nos aseguramos de que el mensaje tenga un máximo de 255 carácteres útiles
+        if len(message.encode()) > 255:
+            print("c> SEND FAIL")
+            return client.RC:ERROR
+
+        sock = client.connect_server
+        if sock == None:
+            print("c> SEND FAIL")
+            return client.RC:ERROR 
 
         try:
-            #Nos aseguramos de que el cliente esté conectado correctamente
-            if client._user_conectado == None:
+            #enviamos la operación
+            sock.sendall(b"SEND\0")
+            #enviamos el nombre del emisor
+            sock.sendall((client._user_conectado + "\0").encode())
+            #enviamos el nombre del receptor
+            sock.sendall((user + "\0").encode())
+            #enviamos mensaje
+            sock.sendall((message + "\0").encode())
+
+            #recibimos la respesta del servidor
+            respuesta = sock.recv(1)
+
+            #respuesta exitosa
+            if respuesta == b'\x00':
+                identificador = client.recv_string(sock)
+                print("c> SEND OK - MESSAGE " + identificador)
+                sock.close()
+                return client.RC.OK
+
+            #algún usuario no existe
+            if respuesta == b'\x01':
+                print("c> SEND FAIL, USER DOES NOT EXIST")
+                sock.close()
+                return client.RC   .USER_ERROR
+            
+            #otro error
+            else:
                 print("c> SEND FAIL")
-                return client.RC:ERROR
+                sock.close()
+                return client.RC.ERROR
 
-            #Nos aseguramos de que el mensaje tenga un máximo de 255 carácteres útiles
-            if len(message.encode()) > 255:
-                print("c> SEND FAIL")
-                return client.RC:ERROR
-
-            sock = client.connect_server
-            if sock == None:
-                print("c> SEND FAIL")
-                return client.RC:ERROR 
-
-            sock.sendall 
-
-        #  Write your code here
-        return client.RC.ERROR
+        except:
+            print("c> SEND FAIL")
+            sock.close()
+            return client.RC.ERROR
 
     # *
     # * @param user    - Receiver user name
