@@ -20,3 +20,5 @@ enviar codigo de ooeracion
 bucle para almacenar el resultado hasta encontrar el fin de cadena
 
 dependiendo del resultado hacemos una cosa u otra
+
+#sendattach sigue el mismo flujo que el send pero  envia el nombre del fichero
