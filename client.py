@@ -307,8 +307,47 @@ class client :
     # * @return ERROR the user does not exist or another error occurred
     @staticmethod
     def  sendAttach(user,  file,  message) :
-        #  Write your code here
-        return client.RC.ERROR
+        #Nos aseguramos de que el cliente esté conectado correctamente
+        if client._user_conectado == None:
+            print("c> SENDATTACH FAIL")
+            return client.RC.ERROR
+
+        #Nos aseguramos de que el mensaje tenga un máximo de 255 carácteres útiles
+        if len(message.encode()) > 255:
+            print("c> SENDATTACH FAIL")
+            return client.RC.ERROR
+        try:
+            sock = client.connect_server()
+            if sock == None:
+                print("c> SENDATTACH FAIL")
+                return client.RC.ERROR
+
+            #enviamos la operacion
+            sock.sendall(b"SENDATTACH\0")
+            #enviamos el nombre del emisor
+            sock.sendall((client._user_conectado + "\0").encode())
+            sock.sendall((user + "\0").encode())
+            sock.sendall((file + "\0").encode())
+            sock.sendall((message + "\0").encode())
+            #recibimos la respesta del servidor
+            respuesta = sock.recv(1)
+            if respuesta == b'\x00':
+                identificador = client.recv_string(sock)
+                print("c> SENDATTACH OK - MESSAGE " + identificador)
+                sock.close()
+                return client.RC.OK
+            elif respuesta == b'\x01':
+                print("c> SENDATTACH FAIL, USER DOES NOT EXIST")
+                sock.close()
+                return client.RC.USER_ERROR
+            else:
+                print("c> SENDATTACH FAIL")
+                sock.close()
+                return client.RC.ERROR
+
+        except Exception as e: 
+            print("c> SENDATTACH FAIL")
+            return client.RC.ERROR
 
     # *
     # **
