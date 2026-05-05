@@ -249,19 +249,18 @@ class client :
         #Nos aseguramos de que el cliente esté conectado correctamente
         if client._user_conectado == None:
             print("c> SEND FAIL")
-            return client.RC:ERROR
+            return client.RC.ERROR
 
         #Nos aseguramos de que el mensaje tenga un máximo de 255 carácteres útiles
         if len(message.encode()) > 255:
             print("c> SEND FAIL")
-            return client.RC:ERROR
-
-        sock = client.connect_server
-        if sock == None:
-            print("c> SEND FAIL")
-            return client.RC:ERROR 
+            return client.RC.ERROR
 
         try:
+            sock = client.connect_server()
+            if sock == None:
+                print("c> SEND FAIL")
+                return client.RC.ERROR 
             #enviamos la operación
             sock.sendall(b"SEND\0")
             #enviamos el nombre del emisor
@@ -282,10 +281,10 @@ class client :
                 return client.RC.OK
 
             #algún usuario no existe
-            if respuesta == b'\x01':
+            elif respuesta == b'\x01':
                 print("c> SEND FAIL, USER DOES NOT EXIST")
                 sock.close()
-                return client.RC   .USER_ERROR
+                return client.RC.USER_ERROR
             
             #otro error
             else:
@@ -440,7 +439,7 @@ class client :
                 #leemos la operacion
                 operacion = client.recv_string(conexion)
 
-                if operacion == "SEND MESSAGE":
+                if operacion == "SEND_MESSAGE":
                     remitente = client.recv_string(conexion)
                     id_mensaje = client.recv_string(conexion)
                     mensaje = client.recv_string(conexion)
@@ -449,11 +448,8 @@ class client :
                     print(mensaje)
                     print("END\n")
                     print("c> ", end="", flush=True)
-                elif operacion == "SEND MESS ACK":
-                    id_mensaje = b""
-                    while not id_mensaje.endswith(b'\0'):
-                        id_mensaje += conexion.recv(1)  
-                    id_mensaje = id_mensaje[:-1].decode()
+                elif operacion == "SEND_MESS_ACK":
+                    id_mensaje = client.recv_string(conexion)
                     print(f"\nc> SEND MESSAGE {id_mensaje} OK")
                     print("c> ", end="", flush=True)
                 conexion.close()
