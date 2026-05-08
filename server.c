@@ -181,7 +181,7 @@ void *tratar_cliente(void *arg) {
                 pthread_exit(NULL); 
             } 
             strcpy(lista_usuarios[encontrado].ip, inet_ntoa(addr.sin_addr));
-
+        }
         pthread_mutex_unlock(&mutex_usuarios);
         write(socket_cliente, &resultado, 1);
         if (resultado != 0){
