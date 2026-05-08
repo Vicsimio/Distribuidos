@@ -111,6 +111,7 @@ void *tratar_cliente(void *arg) {
                 break;
             }
         } 
+        resultado = 2;
         /* el usuario no existe*/
         if (index_usuario == -1){
             resultado = 1;
@@ -124,9 +125,7 @@ void *tratar_cliente(void *arg) {
             num_usuarios--;
             resultado = 0;
         /*cualquier otro caso*/
-        } else{
-            resultado = 2;
-        }
+        } 
 
         pthread_mutex_unlock(&mutex_usuarios);
         write(socket_cliente, &resultado, 1);
@@ -160,7 +159,8 @@ void *tratar_cliente(void *arg) {
                 encontrado = i;
                 break;
             }
-        }   
+        }
+        resultado = 3;
         /*usuario no encontrado */
         if (encontrado == -1) {
             resultado = 1;
