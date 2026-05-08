@@ -47,25 +47,29 @@ void *tratar_cliente(void *arg) {
     }
     /*operación de registro*/
     if (strcmp(operacion, "REGISTER") == 0) {
-        /*recibimos el nombre del cliente*/
-        if (recibir_cadena(socket_cliente, usuario)) {
-            perror("Error al recibir el nombre del usuario");
-            pthread_exit(NULL);
-        }
-        /*verificamos si el usuario ya existe*/
-        pthread_mutex_lock(&mutex_usuarios);
-        int index_usuario = -1;
+
+        recibir_cadena(socket_cliente, usuario);
+        pthread_mutex_lock(&mutex_lista);
+        int encontrado = -1;
         for (int i = 0; i < num_usuarios; i++) {
-            /*vamos comprobando usuario por usuario comparando los dos string*/
-            if (strcmp(lista_usuarios[i].nombre, usuario) == 0) {
-                index_usuario = i;
-                lista_usuarios[index_usuario].conectado = 0;
+            if (strcmp(usuarios[i].nombre, usuario) == 0) {
+                encontrado = i;
                 break;
             }
         }
-        /*si el usuario no existe, lo añadimos a la lista*/
-        /*devolvemos el resultado para que el cliente lo reciba*/    
-        pthread_mutex_unlock(&mutex_usuarios);
+        if (encontrado != -1) {
+            resultado = 2; 
+        } else if (num_usuarios >= MAX_USERS) {
+            resultado = 1; 
+        } else {
+            strcpy(usuarios[num_usuarios].nombre, usuario);
+            usuarios[num_usuarios].conectado = 0;
+            num_usuarios++;
+            resultado = 0; 
+        }
+
+        pthread_mutex_unlock(&mutex_lista);
+        write(socket_cliente, &resultado, 1);
 
     } else if (strcmp(operacion, "UNREGISTER") == 0) {
         /*operación de unregister*/
