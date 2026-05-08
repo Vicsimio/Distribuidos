@@ -22,3 +22,15 @@ bucle para almacenar el resultado hasta encontrar el fin de cadena
 dependiendo del resultado hacemos una cosa u otra
 
 #sendattach sigue el mismo flujo que el send pero  envia el nombre del fichero
+
+
+abrir visual desde la terminal code .
+- 1. entidades
+- 2. protocolo de red (rangos de Ip)
+- 3. servidores 
+    * hilo 
+    * estado
+- 4. mensajes
+- 5. flujo de mensajes
+- 6. nombrado (P4)
+- 7. seguridad 
