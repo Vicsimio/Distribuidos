@@ -487,9 +487,13 @@ class client :
                     print(mensaje)
                     print("END\n")
                     print("c> ", end="", flush=True)
-                elif operacion == "SEND_MESS_ACK":
-                    id_mensaje = client.recv_string(conexion)
-                    print(f"\nc> SEND MESSAGE {id_mensaje} OK")
+                elif operacion == "ATTACH":
+                    remitente = client.recv_string(conexion)
+                    archivo = client.recv_string(conexion)
+                    mensaje = client.recv_string(conexion)
+                    print(f"\ns> ATTACH FROM {remitente}: {archivo}")
+                    print(mensaje)
+                    print("END\n")
                     print("c> ", end="", flush=True)
                 conexion.close()
 

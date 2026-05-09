@@ -299,7 +299,7 @@ void *tratar_cliente(void *arg) {
         struct sockaddr_in addr_destino;
         char receptor[256];
         char mensaje[256];
-        char *comando = "MESSAGE\0";
+        char *comando = "SEND_MESSAGE\0";
         int sock_envio = 0;
 
         /*recibimos el nombre del usuario emisor*/
@@ -342,36 +342,53 @@ void *tratar_cliente(void *arg) {
         }
         pthread_mutex_unlock(&mutex_usuarios); 
         if (resultado == 0) {
-            sock_envio = socket(AF_INET, SOCK_STREAM, 0);
-            addr_destino.sin_family = AF_INET;
-            addr_destino.sin_port = htons(puerto_destino);
-            addr_destino.sin_addr.s_addr = inet_addr(ip_destino);
-            /*enviamos el mensaje al destino*/
-            if (connect(sock_envio, (struct sockaddr *)&addr_destino, sizeof(addr_destino)) == 0) {
-                write(sock_envio, comando, strlen(comando) + 1); 
-                write(sock_envio, usuario, strlen(usuario) + 1); 
-                write(sock_envio, mensaje, strlen(mensaje) + 1); 
-                close(sock_envio);
-            } else {
-                resultado = 2; 
-            }
-        }
-        write(socket_cliente, &resultado, 1);
-        /*enviamos el ID del mensaje*/
-        if (resultado == 0) {
-            char id_str[10];
-            sprintf(id_str, "%d", id_mensajes);
-            id_mensajes++;                      
-            write(socket_cliente, id_str, strlen(id_str) + 1); 
-            
-            printf("s> SEND %s %s %s OK\n", usuario, receptor, mensaje);
-        } else {
-            printf("s> SEND %s %s %s FAIL\n", usuario, receptor, mensaje);
-        }
+         /*preparamos el id como string antes de enviar nada */
+         char id_str[10];
+         sprintf(id_str, "%d", id_mensajes);
+
+         sock_envio = socket(AF_INET, SOCK_STREAM, 0);
+         addr_destino.sin_family = AF_INET;
+         addr_destino.sin_port = htons(puerto_destino);
+         addr_destino.sin_addr.s_addr = inet_addr(ip_destino);
+
+         /*enviamos al receptor en orden */
+         if (connect(sock_envio, (struct sockaddr *)&addr_destino, sizeof(addr_destino)) == 0) {
+             write(sock_envio, comando, strlen(comando) + 1); 
+             write(sock_envio, usuario, strlen(usuario) + 1); 
+             write(sock_envio, id_str, strlen(id_str) + 1);  
+             write(sock_envio, mensaje, strlen(mensaje) + 1); 
+             close(sock_envio);
+         } else {
+             resultado = 2; 
+         }
+     }
+
+     write(socket_cliente, &resultado, 1);
+
+     /* 3. Enviamos el ID al emisor y sumamos 1 al contador */
+     if (resultado == 0) {
+         char id_str[10];
+         sprintf(id_str, "%d", id_mensajes);
+         id_mensajes++;                      
+         write(socket_cliente, id_str, strlen(id_str) + 1); 
+
+         printf("s> SEND %s %s %s OK\n", usuario, receptor, mensaje);
+     } else {
+         printf("s> SEND %s %s %s FAIL\n", usuario, receptor, mensaje);
+     }
 
     /*operacion de enviar mensaje con archivo*/
     } else if(strcmp(operacion, "SENDATTACH") == 0){
         char receptor[256];
+        char mensaje[256];
+        char archivo[256];
+        int remitente_ok = 0;
+        int destino_ok = 0;
+        char ip_destino[16];
+        int puerto_destino = 0;
+        struct sockaddr_in addr_destino;
+        char *comando = "ATTACH\0";
+        int sock_envio = 0;
         /*recibimos el nombre del usuario emisor*/
          if (recibir_cadena(socket_cliente, usuario, 256) == -1) {
             perror("Error al recibir el nombre del usuario emisor");
@@ -386,9 +403,70 @@ void *tratar_cliente(void *arg) {
             pthread_exit(NULL);
         }
         /*recibimos el archivo*/
+        if (recibir_cadena(socket_cliente, archivo, 256) == -1) {
+            perror("Error al recibir el nombre del archivo");
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
         /*recibimos el mensaje*/
-    } 
+        if (recibir_cadena(socket_cliente, mensaje, 256) == -1) {
+            perror("Error al recibir el mensaje");
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
+        pthread_mutex_lock(&mutex_usuarios);
+        for (int i = 0; i < num_usuarios; i++) {
+            if (strcmp(lista_usuarios[i].nombre, usuario) == 0 && lista_usuarios[i].conectado == 1) {
+                remitente_ok = 1;
+            }
+            if (strcmp(lista_usuarios[i].nombre, receptor) == 0 && lista_usuarios[i].conectado == 1) {
+                destino_ok = 1;
+                strcpy(ip_destino, lista_usuarios[i].ip);
+                puerto_destino = lista_usuarios[i].puerto;
+            }
+        }
+        if (remitente_ok == 0) {
+            resultado = 1;
+        } else if (destino_ok == 0) {
+            resultado = 2;
+        } else {
+            resultado = 0;
+        }
+        pthread_mutex_unlock(&mutex_usuarios); 
+
+        /* Conexión al receptor */
+        if (resultado == 0) {
+            sock_envio = socket(AF_INET, SOCK_STREAM, 0);
+            addr_destino.sin_family = AF_INET;
+            addr_destino.sin_port = htons(puerto_destino);
+            addr_destino.sin_addr.s_addr = inet_addr(ip_destino);
+
+            if (connect(sock_envio, (struct sockaddr *)&addr_destino, sizeof(addr_destino)) == 0) {
+                write(sock_envio, comando, strlen(comando) + 1); // Avisamos que es un ATTACH
+                write(sock_envio, usuario, strlen(usuario) + 1); // Quién envía
+                write(sock_envio, archivo, strlen(archivo) + 1); // El nombre del archivo
+                write(sock_envio, mensaje, strlen(mensaje) + 1); // El mensaje
+                close(sock_envio);
+            } else {
+                resultado = 2; // Falló la conexión con el receptor
+            }
+        }
+
+        /* Respuesta al emisor */
+        write(socket_cliente, &resultado, 1);
+        if (resultado == 0) {
+            char id_str[10];
+            sprintf(id_str, "%d", id_mensajes);
+            id_mensajes++;                      
+            write(socket_cliente, id_str, strlen(id_str) + 1); 
+            
+            printf("s> SENDATTACH %s %s %s %s OK\n", usuario, receptor, archivo, mensaje);
+        } else {
+            printf("s> SENDATTACH %s %s %s %s FAIL\n", usuario, receptor, archivo, mensaje);
+        }
     
+    
+    }
     close(socket_cliente);
     pthread_exit(NULL);
 }
