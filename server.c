@@ -7,18 +7,32 @@
 #include <string.h>
 #include <unistd.h>
 #define MAX_USERS 100
+#define MAX_MESSAGES 1000
 
+/*estructura para usuarios*/
 typedef struct {
     char nombre[256];
     char ip[16];
     int puerto;
     int conectado; 
+    unsigned int ultimo_id;
 } Usuario;
+
+/*estructura para mensajes pendientes*/
+typedef struct {
+    char remitente[256];
+    char receptor[256];
+    char mensaje[256];
+    unsigned int id;
+} MensajePendiente;
 
 Usuario lista_usuarios[MAX_USERS];
 int num_usuarios = 0;
-int id_mensajes = 0;
+MensajePendiente mensajes_pendientes[MAX_MESSAGES];
+int num_mensajes_pendientes = 0;
+
 pthread_mutex_t mutex_usuarios = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_mensajes = PTHREAD_MUTEX_INITIALIZER;
 
 /*función auxiliar para recibir cadenas terminadas en '\0' */
 int recibir_cadena(int socket_cliente, char *buffer, int max_len) {
@@ -79,8 +93,9 @@ void *tratar_cliente(void *arg) {
             lista_usuarios[num_usuarios].conectado = 0;
             lista_usuarios[num_usuarios].ip[0] = '\0';
             lista_usuarios[num_usuarios].puerto = 0;
+            lista_usuarios[num_usuarios].ultimo_id = 0;
             num_usuarios++;
-            resultado = 0; 
+            resultado = 0;
         }
 
         pthread_mutex_unlock(&mutex_usuarios);
@@ -129,6 +144,23 @@ void *tratar_cliente(void *arg) {
         } 
 
         pthread_mutex_unlock(&mutex_usuarios);
+        /* si el usuario se ha borrado correctamente, borramos sus mensajes pendientes */
+        if (resultado == 0) {
+            pthread_mutex_lock(&mutex_mensajes);
+
+            for (int i = 0; i < num_mensajes_pendientes; i++) {
+                if (strcmp(mensajes_pendientes[i].receptor, usuario) == 0) {
+                    for (int j = i; j < num_mensajes_pendientes - 1; j++) {
+                        mensajes_pendientes[j] = mensajes_pendientes[j + 1];
+                    }
+                num_mensajes_pendientes--;
+                i--;
+            }
+        }
+
+            pthread_mutex_unlock(&mutex_mensajes);
+        }
+        /*Imprimimos según el resultado*/
         write(socket_cliente, &resultado, 1);
         if(resultado == 0){
             printf("s> UNREGISTER %s OK\n", usuario);        
@@ -248,62 +280,54 @@ void *tratar_cliente(void *arg) {
         int existe = 0;
         int remitente_conectado = 0;
         int num_conectados = 0;
+        /*guardamos una copia de los nombres para poder enviarlos fuera del mutex*/
+        char nombres_conectados[MAX_USERS][256];
 
         /*buscamos si el que pregunta existe, esta conectado y cuenta los usuarios conectados*/
         for (int i = 0; i < num_usuarios; i++) {
             if (strcmp(lista_usuarios[i].nombre, usuario) == 0){
-                existe = 1
-            } 
-            if (lista_usuarios[i].conectado == 1) {
-                remitente_conectado = 1;
+                existe = 1; 
+                if (lista_usuarios[i].conectado == 1) {
+                    remitente_conectado = 1;
+                }
             }
             if (lista_usuarios[i].conectado == 1) {
+                strcpy(nombres_conectados[num_conectados], lista_usuarios[i].nombre);
                 num_conectados++;
             }
         }
-        /*si no existe, pasamos 2 como resultado*/
-        if (!existe) {
-            resultado = 2;
-        } 
-        else if (!remitente_conectado) {
-            resultado = 1;
-        } 
-        else {
-        resultado = 0;
-        }
+        /*si no existe, pasamos 2 como resultado e indicamos que ha fallado*/
+        if (existe == 0) {
+        resultado = 2;
+        pthread_mutex_unlock(&mutex_usuarios);
 
-        /*si el que pregunta no está conectad pues no puede pedir la lista*/
-        if (remitente_conectado == 0) {
-            resultado = 1; 
+        write(socket_cliente, &resultado, 1);
+        printf("s> CONNECTEDUSERS FAIL\n");
+        }
+        /*si existe pero no está conectado pasamos 1*/
+        else if (remitente_conectado == 0) {
+            resultado = 1;
             pthread_mutex_unlock(&mutex_usuarios);
             write(socket_cliente, &resultado, 1);
-            printf("s> USERS %s HA FALLADO\n", usuario);
-        } 
-        /*si el usuario está conectado preparamos todo para enviarle la lista*/
+            printf("s> CONNECTEDUSERS FAIL\n");
+        }
+        /*si todo ha ido bien el código de respuesta es 0*/ 
         else {
             resultado = 0;
-            
-            /*guardamos una copia de los nombres para poder enviarlos fuera del mutex*/
-            char nombres_conectados[MAX_USERS][256];
-            int index = 0;
-            for (int i = 0; i < num_usuarios; i++) {
-                if (lista_usuarios[i].conectado == 1) {
-                    strcpy(nombres_conectados[index], lista_usuarios[i].nombre);
-                    index++;
-                }
-            }
             pthread_mutex_unlock(&mutex_usuarios);
             write(socket_cliente, &resultado, 1);
-            /*enviamos el número de usuarios conectados como string*/
-            char users_connect[10];
-            sprintf(users_connect, "%d", num_conectados);
-            write(socket_cliente, users_connect, strlen(users_connect) + 1);
+            /*creamos una cadena donde guardaremos el número de usuarios conectados*/
+            char num_str[10];
+            /*convertimos num_conectados a cadena y enviamos*/
+            sprintf(num_str, "%d", num_conectados);
+            write(socket_cliente, num_str, strlen(num_str) + 1);
 
-            /*enviamos los nombres de los usuarios uno a uno con su \0 */
+        /*enviamos los nombres de los usuarios conectados*/
             for (int i = 0; i < num_conectados; i++) {
                 write(socket_cliente, nombres_conectados[i], strlen(nombres_conectados[i]) + 1);
             }
-            printf("s> USERS %s OK (%d conectados)\n", usuario, num_conectados);
+
+            printf("s> CONNECTEDUSERS OK\n");
         }
     /*operacion de enviar mensaje*/
     } else if(strcmp(operacion, "SEND") == 0){
@@ -314,7 +338,7 @@ void *tratar_cliente(void *arg) {
         struct sockaddr_in addr_destino;
         char receptor[256];
         char mensaje[256];
-        char *comando = "SEND MESSAGE\0";
+        char *comando = "SEND MESSAGE";
         int sock_envio = 0;
 
         /*recibimos el nombre del usuario emisor*/
@@ -391,8 +415,8 @@ void *tratar_cliente(void *arg) {
      } else {
          printf("s> SEND %s %s %s FAIL\n", usuario, receptor, mensaje);
      }
-
-    /*operacion de enviar mensaje con archivo*/
+    
+    /*operacion de enviar mensaje con archivo*/                                            
     } else if(strcmp(operacion, "SENDATTACH") == 0){
         char receptor[256];
         char mensaje[256];
@@ -479,7 +503,7 @@ void *tratar_cliente(void *arg) {
         } else {
             printf("s> SENDATTACH %s %s %s %s FAIL\n", usuario, receptor, archivo, mensaje);
         }
-    
+        
     
     }
     close(socket_cliente);
