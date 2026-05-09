@@ -470,3 +470,74 @@ void *tratar_cliente(void *arg) {
     close(socket_cliente);
     pthread_exit(NULL);
 }
+int main(int argc, char *argv[]) {
+    int puerto = 0;
+    /*creamos el socket principal del servidor */
+    int server_socket;
+    struct sockaddr_in server_addr;
+    
+    /*comprobamos los argumentos*/
+    if (argc != 3 || strcmp(argv[1], "-p") != 0) {
+        fprintf(stderr, "Uso: %s -p <puerto>\n", argv[0]);
+        exit(1);
+    }
+    puerto = atoi(argv[2]);
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket < 0) {
+        perror("Error creando el socket");
+        exit(1);
+    }
+
+    /* Opciones para poder reutilizar el puerto rápido si cerramos el servidor */
+    int opt = 1;
+    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY; /* Escucha en todas las interfaces (0.0.0.0) */
+    server_addr.sin_port = htons(puerto);
+
+    /*bindeamos el socket al puerto */
+    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Error en bind");
+        close(server_socket);
+        exit(1);
+    }
+
+    /*escuchamos a maximo 10 clientes en cola*/
+    if (listen(server_socket, 10) < 0) {
+        perror("Error en listen");
+        close(server_socket);
+        exit(1);
+    }
+
+    printf("s> init server 127.0.0.1:%d\n", puerto);
+
+    /*atendemos las conexiones */
+    while (1) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        
+        /*reservamos memoria para el socket del cliente para pasarlo al hilo */
+        int *client_socket = malloc(sizeof(int));
+        
+        *client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+        if (*client_socket < 0) {
+            perror("Error en accept");
+            free(client_socket);
+            continue;
+        }
+
+        /*creamos un hilo para que trate a este cliente mientras el main vuelve a hacer accept */
+        pthread_t thread_id;
+        if (pthread_create(&thread_id, NULL, tratar_cliente, client_socket) != 0) {
+            perror("Error creando hilo");
+            free(client_socket);
+        } else {
+            /* Detach para que libere recursos automáticamente al terminar*/
+            pthread_detach(thread_id); 
+        }
+    }
+
+    close(server_socket);
+    return 0;
+}
