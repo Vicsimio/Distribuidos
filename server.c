@@ -17,6 +17,7 @@ typedef struct {
 
 Usuario lista_usuarios[MAX_USERS];
 int num_usuarios = 0;
+int id_mensajes = 0;
 pthread_mutex_t mutex_usuarios = PTHREAD_MUTEX_INITIALIZER;
 
 /*función auxiliar para recibir cadenas terminadas en '\0' */
@@ -291,15 +292,101 @@ void *tratar_cliente(void *arg) {
         }
     /*operacion de enviar mensaje*/
     } else if(strcmp(operacion, "SEND") == 0){
-        if(recibir_cadena(socket_cliente, usuario, 256) == -1){
-            perror("Error al recibir el nombre del usuario");
+        int remitente_ok = 0;
+        int destino_ok = 0;
+        char ip_destino[16];
+        int puerto_destino = 0;
+        struct sockaddr_in addr_destino;
+        char receptor[256];
+        char mensaje[256];
+        char *comando = "MESSAGE\0";
+        int sock_envio = 0;
+
+        /*recibimos el nombre del usuario emisor*/
+        if (recibir_cadena(socket_cliente, usuario, 256) == -1) {
+            perror("Error al recibir el nombre del usuario emisor");
             close(socket_cliente);
             pthread_exit(NULL);
+        }
+        /*recibimos el nombre del usuario receptor*/
+        if (recibir_cadena(socket_cliente, receptor, 256) == -1) {
+            perror("Error al recibir el nombre del usuario receptor");
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
+        /*recibimos el mensaje*/
+        if (recibir_cadena(socket_cliente, mensaje, 256) == -1) {
+            perror("Error al recibir el mensaje");
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
+        pthread_mutex_lock(&mutex_usuarios);
+        for (int i = 0; i < num_usuarios; i++) {
+            if (strcmp(lista_usuarios[i].nombre, usuario) == 0 && lista_usuarios[i].conectado == 1) {
+                remitente_ok = 1;
+            }
+            if (strcmp(lista_usuarios[i].nombre, receptor) == 0 && lista_usuarios[i].conectado == 1) {
+                destino_ok = 1;
+                strcpy(ip_destino, lista_usuarios[i].ip);
+                puerto_destino = lista_usuarios[i].puerto;
+            }
+        }
+        /*remitente no válido*/
+        if (remitente_ok == 0) {
+            resultado = 1; 
+        /*destino no válido o desconectado*/
+        } else if (destino_ok == 0) {
+            resultado = 2; 
+        } else {
+            resultado = 0;
+        }
+        pthread_mutex_unlock(&mutex_usuarios); 
+        if (resultado == 0) {
+            sock_envio = socket(AF_INET, SOCK_STREAM, 0);
+            addr_destino.sin_family = AF_INET;
+            addr_destino.sin_port = htons(puerto_destino);
+            addr_destino.sin_addr.s_addr = inet_addr(ip_destino);
+            /*enviamos el mensaje al destino*/
+            if (connect(sock_envio, (struct sockaddr *)&addr_destino, sizeof(addr_destino)) == 0) {
+                write(sock_envio, comando, strlen(comando) + 1); 
+                write(sock_envio, usuario, strlen(usuario) + 1); 
+                write(sock_envio, mensaje, strlen(mensaje) + 1); 
+                close(sock_envio);
+            } else {
+                resultado = 2; 
+            }
+        }
+        write(socket_cliente, &resultado, 1);
+        /*enviamos el ID del mensaje*/
+        if (resultado == 0) {
+            char id_str[10];
+            sprintf(id_str, "%d", id_mensajes);
+            id_mensajes++;                      
+            write(socket_cliente, id_str, strlen(id_str) + 1); 
+            
+            printf("s> SEND %s %s %s OK\n", usuario, receptor, mensaje);
+        } else {
+            printf("s> SEND %s %s %s FAIL\n", usuario, receptor, mensaje);
         }
 
     /*operacion de enviar mensaje con archivo*/
     } else if(strcmp(operacion, "SENDATTACH") == 0){
-
+        char receptor[256];
+        /*recibimos el nombre del usuario emisor*/
+         if (recibir_cadena(socket_cliente, usuario, 256) == -1) {
+            perror("Error al recibir el nombre del usuario emisor");
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
+        
+        /*recibimos el nombre del usuario receptor*/
+        if (recibir_cadena(socket_cliente, receptor, 256) == -1) {
+            perror("Error al recibir el nombre del usuario receptor");
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
+        /*recibimos el archivo*/
+        /*recibimos el mensaje*/
     } 
     
     close(socket_cliente);
