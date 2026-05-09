@@ -25,7 +25,7 @@ int recibir_cadena(int socket_cliente, char *buffer, int max_len) {
     char caracter;
     int i = 0;
     /*leemos el socket byte a byte*/
-    while (i < max_len - 1 && read(socket_cliente, &caracter, 1) > 0) {
+    while (i < max_len && read(socket_cliente, &caracter, 1) > 0) {
         buffer[i++] = caracter;
         /*si el caracter es fin de cadena, acabamos*/
         if (caracter == '\0') 
@@ -90,7 +90,7 @@ void *tratar_cliente(void *arg) {
             printf("s> REGISTER %s OK\n", usuario);
         }
         else{
-            printf("s> REGISTER %s FAILED\n", usuario);
+            printf("s> REGISTER %s FAIL\n", usuario);
         }
 
     /*operacion de unregister*/
@@ -131,10 +131,10 @@ void *tratar_cliente(void *arg) {
         pthread_mutex_unlock(&mutex_usuarios);
         write(socket_cliente, &resultado, 1);
         if(resultado == 0){
-            printf("s> UNREGISTER %s TODO BIEN\n", usuario);        
+            printf("s> UNREGISTER %s OK\n", usuario);        
         }
         else{
-            printf("s> UNREGISTER %s HA FALLADO\n", usuario);
+            printf("s> UNREGISTER %s FAIL\n", usuario);
         }
     
     /*operacion de conectar a un usuario*/
@@ -178,6 +178,7 @@ void *tratar_cliente(void *arg) {
             socklen_t addr_len = sizeof(addr);
             if (getpeername(socket_cliente, (struct sockaddr *)&addr, &addr_len) == -1) {
                 perror("Error al obtener la dirección del cliente");
+                pthread_mutex_unlock(&mutex_usuarios);
                 close(socket_cliente);
                 pthread_exit(NULL); 
             } 
@@ -186,10 +187,10 @@ void *tratar_cliente(void *arg) {
         pthread_mutex_unlock(&mutex_usuarios);
         write(socket_cliente, &resultado, 1);
         if (resultado != 0){
-            printf("s> CONNECT %s HA FALLADO\n", usuario);
+            printf("s> CONNECT %s FAIL\n", usuario);
         }
         else{
-            printf("s> CONNECT %s TODO BIEN\n", usuario);
+            printf("s> CONNECT %s OK\n", usuario);
         }
 
     /*operacion de desconectar a un usuario*/
@@ -228,9 +229,9 @@ void *tratar_cliente(void *arg) {
         pthread_mutex_unlock(&mutex_usuarios);
         write(socket_cliente, &resultado, 1);
         if (resultado != 0){
-            printf("s> DISCONNECT %s HA FALLADO\n", usuario);
+            printf("s> DISCONNECT %s FAIL\n", usuario);
         }else{
-            printf("s> DISCONNECT %s TODO BIEN\n", usuario);
+            printf("s> DISCONNECT %s OK\n", usuario);
         }
 
     /*operacion de listar usuarios*/
@@ -243,18 +244,32 @@ void *tratar_cliente(void *arg) {
         }
 
         pthread_mutex_lock(&mutex_usuarios);
-
+        
+        int existe = 0;
         int remitente_conectado = 0;
         int num_conectados = 0;
 
         /*buscamos si el que pregunta existe, esta conectado y cuenta los usuarios conectados*/
         for (int i = 0; i < num_usuarios; i++) {
-            if (strcmp(lista_usuarios[i].nombre, usuario) == 0 && lista_usuarios[i].conectado == 1) {
+            if (strcmp(lista_usuarios[i].nombre, usuario) == 0){
+                existe = 1
+            } 
+            if (lista_usuarios[i].conectado == 1) {
                 remitente_conectado = 1;
             }
             if (lista_usuarios[i].conectado == 1) {
                 num_conectados++;
             }
+        }
+        /*si no existe, pasamos 2 como resultado*/
+        if (!existe) {
+            resultado = 2;
+        } 
+        else if (!remitente_conectado) {
+            resultado = 1;
+        } 
+        else {
+        resultado = 0;
         }
 
         /*si el que pregunta no está conectad pues no puede pedir la lista*/
@@ -299,7 +314,7 @@ void *tratar_cliente(void *arg) {
         struct sockaddr_in addr_destino;
         char receptor[256];
         char mensaje[256];
-        char *comando = "SEND_MESSAGE\0";
+        char *comando = "SEND MESSAGE\0";
         int sock_envio = 0;
 
         /*recibimos el nombre del usuario emisor*/
