@@ -218,7 +218,6 @@ class client :
 
                 #cerramos el socket de escucha y esperamos a que el hilo termine
                 client._listen_socket.close()
-                client._listen_thread.join()
                 return client.RC.OK
 
             elif resultado == b'\x01':
