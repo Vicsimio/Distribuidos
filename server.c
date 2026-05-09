@@ -234,6 +234,61 @@ void *tratar_cliente(void *arg) {
 
     /*operacion de listar usuarios*/
     } else if(strcmp(operacion, "USERS") == 0){
+        /*recibimos el nombre del usuario conectado*/
+        if (recibir_cadena(socket_cliente, usuario, 256) == -1) {
+            perror("Error al recibir el nombre del usuario");
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
+
+        pthread_mutex_lock(&mutex_usuarios);
+
+        int remitente_conectado = 0;
+        int num_conectados = 0;
+
+        /*buscamos si el que pregunta existe, esta conectado y cuenta los usuarios conectados*/
+        for (int i = 0; i < num_usuarios; i++) {
+            if (strcmp(lista_usuarios[i].nombre, usuario) == 0 && lista_usuarios[i].conectado == 1) {
+                remitente_conectado = 1;
+            }
+            if (lista_usuarios[i].conectado == 1) {
+                num_conectados++;
+            }
+        }
+
+        /*si el que pregunta no está conectad pues no puede pedir la lista*/
+        if (remitente_conectado == 0) {
+            resultado = 1; 
+            pthread_mutex_unlock(&mutex_usuarios);
+            write(socket_cliente, &resultado, 1);
+            printf("s> USERS %s HA FALLADO\n", usuario);
+        } 
+        /*si el usuario está conectado preparamos todo para enviarle la lista*/
+        else {
+            resultado = 0;
+            
+            /*guardamos una copia de los nombres para poder enviarlos fuera del mutex*/
+            char nombres_conectados[MAX_USERS][256];
+            int index = 0;
+            for (int i = 0; i < num_usuarios; i++) {
+                if (lista_usuarios[i].conectado == 1) {
+                    strcpy(nombres_conectados[index], lista_usuarios[i].nombre);
+                    index++;
+                }
+            }
+            pthread_mutex_unlock(&mutex_usuarios);
+            write(socket_cliente, &resultado, 1);
+            /*enviamos el número de usuarios conectados como string*/
+            char users_connect[10];
+            sprintf(users_connect, "%d", num_conectados);
+            write(socket_cliente, users_connect, strlen(users_connect) + 1);
+
+            /*enviamos los nombres de los usuarios uno a uno con su \0 */
+            for (int i = 0; i < num_conectados; i++) {
+                write(socket_cliente, nombres_conectados[i], strlen(nombres_conectados[i]) + 1);
+            }
+            printf("s> USERS %s OK (%d conectados)\n", usuario, num_conectados);
+        }
     /*operacion de enviar mensaje*/
     } else if(strcmp(operacion, "SEND") == 0){
         if(recibir_cadena(socket_cliente, usuario, 256) == -1){
