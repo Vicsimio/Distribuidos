@@ -254,6 +254,8 @@ void *tratar_cliente(void *arg) {
     
     /*operacion de conectar a un usuario*/
     } else if(strcmp(operacion, "CONNECT") == 0){
+        char ip_usuario[16];
+        int puerto_usuario = 0;
         /*recibe el usuario*/
         if(recibir_cadena(socket_cliente, usuario, 256) == -1){
             perror("Error al recibir el nombre del usuario");
@@ -266,6 +268,21 @@ void *tratar_cliente(void *arg) {
             close(socket_cliente);
             pthread_exit(NULL);
         }
+        /*obtenemos la IP del cliente del socket*/
+        struct sockaddr_in addr;
+        socklen_t addr_len = sizeof(addr);
+        if (getpeername(socket_cliente, (struct sockaddr *)&addr, &addr_len) == -1) {
+            perror("Error al obtener la direccion del cliente");
+            resultado = 3;
+            write(socket_cliente, &resultado, 1);
+            printf("s> CONNECT %s FAIL\n", usuario);
+            close(socket_cliente);
+            pthread_exit(NULL);
+        }
+
+        strcpy(ip_usuario, inet_ntoa(addr.sin_addr));
+        puerto_usuario = atoi(puerto);
+
         /*seccion critica*/
         pthread_mutex_lock(&mutex_usuarios);
         /*busacmos si el usuario existe o no*/
@@ -287,26 +304,114 @@ void *tratar_cliente(void *arg) {
             resultado = 0;
             lista_usuarios[encontrado].conectado = 1;
             /*guardamos el puerto que hemos recibido*/
-            lista_usuarios[encontrado].puerto = atoi(puerto);
-            /*guardamos la ip que capturamos del socket*/
-            struct sockaddr_in addr;
-            socklen_t addr_len = sizeof(addr);
-            if (getpeername(socket_cliente, (struct sockaddr *)&addr, &addr_len) == -1) {
-                perror("Error al obtener la dirección del cliente");
-                pthread_mutex_unlock(&mutex_usuarios);
-                close(socket_cliente);
-                pthread_exit(NULL); 
-            } 
-            strcpy(lista_usuarios[encontrado].ip, inet_ntoa(addr.sin_addr));
+            lista_usuarios[encontrado].puerto = puerto_usuario;
+            strcpy(lista_usuarios[encontrado].ip, ip_usuario);
         }
         pthread_mutex_unlock(&mutex_usuarios);
+
+        /*respondemos al cliente*/
         write(socket_cliente, &resultado, 1);
         if (resultado != 0){
             printf("s> CONNECT %s FAIL\n", usuario);
         }
         else{
             printf("s> CONNECT %s OK\n", usuario);
+            /* Si el usuario tenia mensajes pendientes se los enviamos ahora uno a uno*/
+            int seguir = 1;
+
+            while (seguir) {
+                MensajePendiente mensaje_pendiente;
+                int encontrado_mensaje = -1;
+
+                /*buscamos un mensaje pendiente para este usuario*/
+                pthread_mutex_lock(&mutex_mensajes);
+
+                for (int i = 0; i < num_mensajes_pendientes; i++) {
+                    if (strcmp(mensajes_pendientes[i].receptor, usuario) == 0) {
+                        mensaje_pendiente = mensajes_pendientes[i];
+                        encontrado_mensaje = i;
+                        break;
+                    }
+                }
+
+                pthread_mutex_unlock(&mutex_mensajes);
+
+                /*si no hay mensajes pendientes, terminamos*/
+                if (encontrado_mensaje == -1) {
+                    seguir = 0;
+                }
+
+                else {
+                    /*intentamos enviar el mensaje pendiente al usuarioque se acaba de conectar */
+                    if (enviar_mensaje_cliente(ip_usuario, puerto_usuario,mensaje_pendiente.remitente, mensaje_pendiente.id, mensaje_pendiente.mensaje) == 0) {
+
+                        printf("s> SEND MESSAGE %u FROM %s TO %s\n", mensaje_pendiente.id, mensaje_pendiente.remitente, mensaje_pendiente.receptor);
+
+                        /*si el mensaje se ha entregado bien lo borramos de la lista de pendientes*/
+                        pthread_mutex_lock(&mutex_mensajes);
+
+                        for (int i = 0; i < num_mensajes_pendientes; i++) {
+                            if (mensajes_pendientes[i].id == mensaje_pendiente.id &&
+                                strcmp(mensajes_pendientes[i].remitente, mensaje_pendiente.remitente) == 0 &&
+                                strcmp(mensajes_pendientes[i].receptor, mensaje_pendiente.receptor) == 0) {
+
+                                for (int j = i; j < num_mensajes_pendientes - 1; j++) {
+                                    mensajes_pendientes[j] = mensajes_pendientes[j + 1];
+                                }
+
+                                num_mensajes_pendientes--;
+                                break;
+                            }
+                        }
+
+                        pthread_mutex_unlock(&mutex_mensajes);
+
+                        /*Ahora buscamos si el remitente sigue conectado. Si lo esta, le enviamos el ACK*/
+                        pthread_mutex_lock(&mutex_usuarios);
+
+                        int remitente_conectado = 0;
+                        char ip_remitente[16];
+                        int puerto_remitente = 0;
+
+                        for (int i = 0; i < num_usuarios; i++) {
+                            if (strcmp(lista_usuarios[i].nombre, mensaje_pendiente.remitente) == 0 &&
+                                lista_usuarios[i].conectado == 1) {
+
+                                remitente_conectado = 1;
+                                strcpy(ip_remitente, lista_usuarios[i].ip);
+                                puerto_remitente = lista_usuarios[i].puerto;
+                                break;
+                            }
+                        }
+
+                        pthread_mutex_unlock(&mutex_usuarios);
+
+                        if (remitente_conectado == 1) {
+                            enviar_ack_cliente(ip_remitente, puerto_remitente, mensaje_pendiente.id);
+                        }
+                    }
+
+                    else {
+                        /*Si falla el envio, dejamos el mensaje pendiente y marcamos al usuario como desconectado*/
+                        pthread_mutex_lock(&mutex_usuarios);
+
+                        for (int i = 0; i < num_usuarios; i++) {
+                            if (strcmp(lista_usuarios[i].nombre, usuario) == 0) {
+                                lista_usuarios[i].conectado = 0;
+                                lista_usuarios[i].ip[0] = '\0';
+                                lista_usuarios[i].puerto = 0;
+                                break;
+                            }
+                        }
+
+                        pthread_mutex_unlock(&mutex_usuarios);
+
+                        seguir = 0;
+                    }
+                }
+            }
         }
+    
 
     /*operacion de desconectar a un usuario*/
     } else if(strcmp(operacion, "DISCONNECT") == 0){

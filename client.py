@@ -477,20 +477,27 @@ class client :
                 #leemos la operacion
                 operacion = client.recv_string(conexion)
 
-                if operacion == "SEND_MESSAGE":
+                if operacion == "SEND MESSAGE":
                     remitente = client.recv_string(conexion)
                     id_mensaje = client.recv_string(conexion)
                     mensaje = client.recv_string(conexion)
 
-                    print(f"\ns> MESSAGE {id_mensaje} FROM {remitente}")
+                    print(f"\nc> MESSAGE {id_mensaje} FROM {remitente}")
                     print(mensaje)
                     print("END\n")
                     print("c> ", end="", flush=True)
+                
+                elif operacion == "SEND MESS ACK":
+                    id_mensaje = client.recv_string(conexion)
+
+                    print(f"\nc> SEND MESSAGE {id_mensaje} OK")
+                    print("c> ", end="", flush=True)
+
                 elif operacion == "ATTACH":
                     remitente = client.recv_string(conexion)
                     archivo = client.recv_string(conexion)
                     mensaje = client.recv_string(conexion)
-                    print(f"\ns> ATTACH FROM {remitente}: {archivo}")
+                    print(f"\nc> ATTACH FROM {remitente}: {archivo}")
                     print(mensaje)
                     print("END\n")
                     print("c> ", end="", flush=True)
