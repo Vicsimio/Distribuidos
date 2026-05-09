@@ -47,3 +47,26 @@ DISCONNECT alumno_emisor
 QUIT
 """
 ejecutar_prueba("Prueba 3: Control de errores (Envío a usuario inexistente)", comandos_error_envio)
+
+# prueba 4: enviar mensaje a usuario registrado pero desconectado
+comandos_send_pendiente = """REGISTER receptor1
+REGISTER emisor1
+CONNECT emisor1
+SEND receptor1 Hola receptor, estas desconectado
+DISCONNECT emisor1
+QUIT
+"""
+ejecutar_prueba("Prueba 4: Envío a usuario registrado pero desconectado", comandos_send_pendiente)
+
+# prueba 5: pedir USERS sin estar conectado
+comandos_users_sin_conectar = """REGISTER alumno_users
+USERS
+QUIT
+"""
+ejecutar_prueba("Prueba 5: USERS sin estar conectado", comandos_users_sin_conectar)
+
+# prueba 6: conectar usuario inexistente
+comandos_connect_inexistente = """CONNECT no_existo
+QUIT
+"""
+ejecutar_prueba("Prueba 6: CONNECT de usuario inexistente", comandos_connect_inexistente)
