@@ -198,13 +198,42 @@ void *tratar_cliente(void *arg) {
             close(socket_cliente);
             pthread_exit(NULL);
         }
+        /*seccion critica*/
+        pthread_mutex_lock(&mutex_usuarios);
+        /*busacmos si el usuario existe o no*/
+        int encontrado = -1;
+        for (int i = 0; i < num_usuarios; i++) {
+            if (strcmp(lista_usuarios[i].nombre, usuario) == 0) {
+                encontrado = i;
+                break;
+            }
+        }
+        resultado = 3;
+        /*usuario no encontrado */
+        if (encontrado == -1) 
+            resultado = 1;
+        /*usuario no conectado  por lo que no se puede desconectar*/
+        else if (lista_usuarios[encontrado].conectado == 0) 
+            resultado = 2;
+        /*usuario encontrado y conectado*/
+        else if (encontrado != -1) {
+            resultado = 0;
+            /*desconectamos al usuario*/
+            lista_usuarios[encontrado].conectado = 0;
+            /*borramos la ip y el puerto del usuario*/
+            lista_usuarios[encontrado].ip[0] = '\0';
+            lista_usuarios[encontrado].puerto = 0;
+        }
+        pthread_mutex_unlock(&mutex_usuarios);
+        write(socket_cliente, &resultado, 1);
+        if (resultado != 0){
+            printf("s> DISCONNECT %s HA FALLADO\n", usuario);
+        }else{
+            printf("s> DISCONNECT %s TODO BIEN\n", usuario);
+        }
+
     /*operacion de listar usuarios*/
     } else if(strcmp(operacion, "USERS") == 0){
-        if(recibir_cadena(socket_cliente, usuario, 256) == -1){
-            perror("Error al recibir el nombre del usuario");
-            close(socket_cliente);
-            pthread_exit(NULL);
-        }
     /*operacion de enviar mensaje*/
     } else if(strcmp(operacion, "SEND") == 0){
         if(recibir_cadena(socket_cliente, usuario, 256) == -1){
