@@ -4,7 +4,7 @@
 
 /*registtro una operación normal del usuario*/
 bool_t
-log_operacion1_svc(log_args arg1, int *result, struct svc_req *rqstp){
+log_operacion_1_svc(log_args arg1, int *result, struct svc_req *rqstp){
     /*imprimimos el usuario y la operacion*/
     printf("%s: %s\n", arg1.usuario, arg1.operacion);
     *result = 0;
@@ -12,7 +12,7 @@ log_operacion1_svc(log_args arg1, int *result, struct svc_req *rqstp){
 }
 /*registramos una operación sendattach de un usuario*/
 bool_t
-log_sendattach1_svc(log_attach_args arg1, int *result, struct svc_req *rqstp){
+log_sendattach_1_svc(log_attach_args arg1, int *result, struct svc_req *rqstp){
     /*imprimimos el usuario, la operacion y el fichero*/
     printf("%s SENDATTACH %s\n", arg1.usuario, arg1.fichero);
     *result = 0;

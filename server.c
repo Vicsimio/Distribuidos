@@ -562,6 +562,13 @@ void *tratar_cliente(void *arg) {
             }
 
             printf("s> CONNECTEDUSERS OK\n");
+            if (clnt_log != NULL) {
+                log_args args_log;
+                args_log.usuario = usuario; 
+                args_log.operacion = "USERS";
+                /*llamamos a la función remota*/
+                log_operacion_1(args_log, &res_rpc, clnt_log);
+            }
         }
     /*operacion de enviar mensaje*/
     } else if(strcmp(operacion, "SEND") == 0){
@@ -647,6 +654,12 @@ void *tratar_cliente(void *arg) {
             /*respondemos al cliente que envio el mensaje*/
             write(socket_cliente, &resultado, 1);
             enviar_cadena(socket_cliente, id_str);
+            if (clnt_log != NULL) {
+                log_args args_log;
+                args_log.usuario = usuario; 
+                args_log.operacion = "SEND";
+                log_operacion_1(args_log, &res_rpc, clnt_log);
+            }
 
             /*si el receptor esta conectado intentamos enviarle el mensaje*/
             if (receptor_conectado == 1) {
