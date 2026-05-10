@@ -493,7 +493,7 @@ class client :
                     print(f"\nc> SEND MESSAGE {id_mensaje} OK")
                     print("c> ", end="", flush=True)
 
-                elif operacion == "ATTACH":
+                elif operacion == "SEND MESSAGE_ATTACH":
                     remitente = client.recv_string(conexion)
                     archivo = client.recv_string(conexion)
                     mensaje = client.recv_string(conexion)

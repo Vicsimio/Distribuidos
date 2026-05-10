@@ -631,7 +631,7 @@ void *tratar_cliente(void *arg) {
         if (indice_remitente == -1 || indice_receptor == -1) {
             resultado = 1;
             pthread_mutex_unlock(&mutex_usuarios);
-
+            /*respondemos al cliente que envio el mensaje*/
             write(socket_cliente, &resultado, 1);
             printf("s> SEND MESSAGE FROM %s TO %s FAIL\n", usuario, receptor);
         }
@@ -708,19 +708,21 @@ void *tratar_cliente(void *arg) {
             }
         }
     
-    /*operacion de enviar mensaje con archivo*/
-    #if 0                                           
+    /*operacion de enviar mensaje con archivo*/                                        
     } else if(strcmp(operacion, "SENDATTACH") == 0){
         char receptor[256];
         char mensaje[256];
         char archivo[256];
         int remitente_ok = 0;
+        int indice_remitente = -1;
         int destino_ok = 0;
         char ip_destino[16];
         int puerto_destino = 0;
         struct sockaddr_in addr_destino;
-        char *comando = "ATTACH\0";
+        char *comando = "SEND MESSAGE_ATTACH\0";
         int sock_envio = 0;
+        unsigned int id_mensaje = 0;
+
         /*recibimos el nombre del usuario emisor*/
          if (recibir_cadena(socket_cliente, usuario, 256) == -1) {
             perror("Error al recibir el nombre del usuario emisor");
@@ -747,9 +749,11 @@ void *tratar_cliente(void *arg) {
             pthread_exit(NULL);
         }
         pthread_mutex_lock(&mutex_usuarios);
+        /*búsqueda del remitente y del destinatario*/
         for (int i = 0; i < num_usuarios; i++) {
             if (strcmp(lista_usuarios[i].nombre, usuario) == 0 && lista_usuarios[i].conectado == 1) {
                 remitente_ok = 1;
+                indice_remitente = i;
             }
             if (strcmp(lista_usuarios[i].nombre, receptor) == 0 && lista_usuarios[i].conectado == 1) {
                 destino_ok = 1;
@@ -763,41 +767,62 @@ void *tratar_cliente(void *arg) {
             resultado = 2;
         } else {
             resultado = 0;
+            lista_usuarios[indice_remitente].ultimo_id++;
+            if (lista_usuarios[indice_remitente].ultimo_id == 0) {
+                lista_usuarios[indice_remitente].ultimo_id = 1;
+            }
+            id_mensaje = lista_usuarios[indice_remitente].ultimo_id;
         }
         pthread_mutex_unlock(&mutex_usuarios); 
+        char id_str[20];
+        if (resultado == 0) {
+            sprintf(id_str, "%u", id_mensaje);
+        }
 
-        /* Conexión al receptor */
+        /*conexión al receptor*/
         if (resultado == 0) {
             sock_envio = socket(AF_INET, SOCK_STREAM, 0);
             addr_destino.sin_family = AF_INET;
             addr_destino.sin_port = htons(puerto_destino);
             addr_destino.sin_addr.s_addr = inet_addr(ip_destino);
-
+            
             if (connect(sock_envio, (struct sockaddr *)&addr_destino, sizeof(addr_destino)) == 0) {
-                write(sock_envio, comando, strlen(comando) + 1); // Avisamos que es un ATTACH
-                write(sock_envio, usuario, strlen(usuario) + 1); // Quién envía
-                write(sock_envio, archivo, strlen(archivo) + 1); // El nombre del archivo
-                write(sock_envio, mensaje, strlen(mensaje) + 1); // El mensaje
+                /*enviamos los datos al receptor*/
+                write(sock_envio, comando, strlen(comando) + 1);
+                write(sock_envio, usuario, strlen(usuario) + 1); 
+                write(sock_envio, archivo, strlen(archivo) + 1); 
+                write(sock_envio, mensaje, strlen(mensaje) + 1); 
+                
                 close(sock_envio);
-            } else {
-                resultado = 2; // Falló la conexión con el receptor
+            } else { /*caso de error en la conexión*/
+                resultado = 2; 
             }
         }
-
-        /* Respuesta al emisor */
-        write(socket_cliente, &resultado, 1);
+        char res_byte = (char)resultado;
+        write(socket_cliente, &res_byte, 1);
+        /*respuesta al emisor */
         if (resultado == 0) {
-            char id_str[10];
-            sprintf(id_str, "%d", id_mensajes);
-            id_mensajes++;                      
-            write(socket_cliente, id_str, strlen(id_str) + 1); 
-            
+            write(socket_cliente, id_str, strlen(id_str) + 1);
             printf("s> SENDATTACH %s %s %s %s OK\n", usuario, receptor, archivo, mensaje);
+
+            /*guardamos en el log*/
+            if (clnt_log != NULL) {
+                /*creamos la estructura de argumentos para el log*/
+                log_attach_args args_attach; 
+                
+                /*rellenamos los campos*/
+                args_attach.usuario = usuario;
+                args_attach.fichero = archivo;
+                
+                /*llamamos al procedimiento RPC*/
+                enum clnt_stat status = log_sendattach_1(args_attach, &res_rpc, clnt_log);
+                if (status != RPC_SUCCESS) {
+                    printf("Error enviando log al servidor RPC.\n");
+                }
+            }
         } else {
             printf("s> SENDATTACH %s %s %s %s FAIL\n", usuario, receptor, archivo, mensaje);
-        }
-        
-    #endif
+        }   
     }
     if (clnt_log != NULL) clnt_destroy(clnt_log);   
     close(socket_cliente);
@@ -821,12 +846,13 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    /* Opciones para poder reutilizar el puerto rápido si cerramos el servidor */
+    /*opciones para poder reutilizar el puerto rápido si cerramos el servidor*/
     int opt = 1;
     setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY; /* Escucha en todas las interfaces (0.0.0.0) */
+    /*escucha en todas las interfaces*/
+    server_addr.sin_addr.s_addr = INADDR_ANY; 
     server_addr.sin_port = htons(puerto);
 
     /*bindeamos el socket al puerto */
@@ -845,7 +871,7 @@ int main(int argc, char *argv[]) {
 
     printf("s> init server 127.0.0.1:%d\n", puerto);
 
-    /*atendemos las conexiones */
+    /*atendemos las conexiones*/
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);

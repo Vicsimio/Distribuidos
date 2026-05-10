@@ -2,7 +2,7 @@ from flask import Flask, Response
 
 app = Flask(__name__)
 
-# Este es el "WSDL" manual para que Zeep no se queje
+#para simplificar, el WSDL lo ponemos como un string fijo.
 WSDL_CONTENT = """<?xml version="1.0" encoding="UTF-8"?>
 <wsdl:definitions name="ServicioNormalizar"
     targetNamespace="http://localhost:8000/"
@@ -38,23 +38,21 @@ WSDL_CONTENT = """<?xml version="1.0" encoding="UTF-8"?>
 </wsdl:definitions>"""
 
 @app.route('/')
+#para que Zeep pueda obtener el WSDL, lo servimos en GET
 def wsdl():
-    # Cuando Zeep pida ?wsdl, le damos el XML
     return Response(WSDL_CONTENT, mimetype='text/xml')
-
+#recibimos la petición SOAP en POST, procesamos el mensaje y devolvemos la respuesta
 @app.route('/', methods=['POST'])
 def soap_api():
-    # Aquí recibimos la petición de Zeep, limpiamos y devolvemos
-    # Para simplificar y que funcione sí o sí, devolvemos un XML SOAP básico
     import re
     from flask import request
     
     data = request.data.decode('utf-8')
-    # Extraemos el mensaje del XML (forma rápida)
+    #extraemos el mensaje del XML usando regex
     match = re.search(r'<mensaje.*?>(.*?)</mensaje>', data)
     mensaje_sucio = match.group(1) if match else ""
     
-    # NORMALIZACIÓN (Lo que pide el PDF)
+    #normalizamos el mensaje eliminando espacios extras
     mensaje_limpio = " ".join(mensaje_sucio.split())
     
     print(f"WS> Recibido: '{mensaje_sucio}' -> Enviado: '{mensaje_limpio}'")
@@ -70,5 +68,4 @@ def soap_api():
     return Response(response_xml, mimetype='text/xml')
 
 if __name__ == '__main__':
-    # Instalación rápida: pip install flask
     app.run(host='0.0.0.0', port=8000)
