@@ -6,6 +6,8 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <unistd.h>
+#include "rpc/logRPC.h"
+
 #define MAX_USERS 100
 #define MAX_MESSAGES 1000
 
@@ -139,6 +141,15 @@ void *tratar_cliente(void *arg) {
     char usuario[256];
     char resultado;
     char puerto[256];
+    /*guardar el resultado*/
+    int res_rpc;
+
+    /*creamos el cliente RPC para el servidor de logs*/
+    CLIENT *clnt_log;
+    clnt_log = clnt_create("localhost", LOG_PROG, LOG_VERS, "tcp");
+    if (clnt_log == NULL) {
+        printf("Aviso: No se pudo conectar al servidor de logs RPC.\n");    
+    }
 
     /*recibimos la operación del cliente*/
     if (recibir_cadena(socket_cliente, operacion, 256) == -1) {
@@ -179,6 +190,17 @@ void *tratar_cliente(void *arg) {
             lista_usuarios[num_usuarios].ultimo_id = 0;
             num_usuarios++;
             resultado = 0;
+            if (clnt_log != NULL) {
+                log_args args_log;
+                enum clnt_stat status;
+
+                /*rellenamos los datos*/
+                args_log.usuario = usuario;
+                args_log.operacion = "REGISTER";
+                /*llamamos a la función remota*/
+                status = log_operacion_1(args_log, &res_rpc, clnt_log);
+                if (status != RPC_SUCCESS) printf("Error enviando log al servidor RPC.\n");
+            }
         }
 
         pthread_mutex_unlock(&mutex_usuarios);
@@ -242,6 +264,14 @@ void *tratar_cliente(void *arg) {
         }
 
             pthread_mutex_unlock(&mutex_mensajes);
+            if (clnt_log != NULL) {
+                log_args args_log;
+                enum clnt_stat status;
+                args_log.usuario = usuario; 
+                args_log.operacion = "UNREGISTER"; 
+
+                status = log_operacion_1(args_log, &res_rpc, clnt_log);
+            }
         }
         /*Imprimimos según el resultado*/
         write(socket_cliente, &resultado, 1);
@@ -316,6 +346,14 @@ void *tratar_cliente(void *arg) {
         }
         else{
             printf("s> CONNECT %s OK\n", usuario);
+            if (clnt_log != NULL) {
+                log_args args_log;
+                /*rellenamos los datos*/
+                args_log.usuario = usuario; 
+                args_log.operacion = "CONNECT"; 
+                /*llamamos a la función remota*/
+                log_operacion_1(args_log, &res_rpc, clnt_log);
+            }
             /* Si el usuario tenia mensajes pendientes se los enviamos ahora uno a uno*/
             int seguir = 1;
 
@@ -452,6 +490,14 @@ void *tratar_cliente(void *arg) {
             printf("s> DISCONNECT %s FAIL\n", usuario);
         }else{
             printf("s> DISCONNECT %s OK\n", usuario);
+            if (clnt_log != NULL) {
+                log_args args_log;
+                args_log.usuario = usuario; 
+                args_log.operacion = "DISCONNECT"; 
+                
+                /*llamamos a la función remota*/
+                log_operacion_1(args_log, &res_rpc, clnt_log);
+            }
         }
 
     /*operacion de listar usuarios*/
@@ -740,7 +786,7 @@ void *tratar_cliente(void *arg) {
         
     #endif
     }
-    
+    if (clnt_log != NULL) clnt_destroy(clnt_log);   
     close(socket_cliente);
     pthread_exit(NULL);
 }
